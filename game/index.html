@@ -1,19 +1,123 @@
 <!doctype html>
-<html lang="en">
+<html lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<link rel="icon" href="data:,">
+<title>Solmar Heat — Open World</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1210; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; display: none; }
+  .panel { background: rgba(10, 10, 16, 0.55); border-radius: 10px; padding: 10px 14px; }
+  #top-left { position: absolute; top: 14px; left: 14px; }
+  #health-bar { width: 220px; height: 20px; background: rgba(0,0,0,0.6); border: 2px solid #fff; border-radius: 5px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #4caf50; }
+  #health-text { font-size: 20px; font-weight: 800; text-shadow: 0 2px 4px #000; margin-top: 4px; }
+  #money { font-size: 30px; font-weight: 900; color: #ffd24a; text-shadow: 0 2px 4px #000; margin-top: 2px; }
+  #top-right { position: absolute; top: 14px; right: 14px; text-align: right; }
+  #stars { font-size: 34px; letter-spacing: 2px; text-shadow: 0 2px 4px #000; }
+  #clock { font-size: 26px; font-weight: 800; text-shadow: 0 2px 4px #000; }
+  #bottom-left { position: absolute; left: 14px; bottom: 14px; }
+  #speed { font-size: 30px; font-weight: 900; text-shadow: 0 2px 4px #000; }
+  #hint { position: absolute; left: 14px; top: 152px; font-size: 15px; color: #e8e8e8; text-shadow: 0 1px 3px #000; }
+  #objective { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: 640px; text-align: center;
+    font-size: 22px; font-weight: 800; text-shadow: 0 2px 4px #000; background: rgba(10,10,16,0.55); border-radius: 10px; padding: 10px 16px; }
+  #toast { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); font-size: 24px; font-weight: 800;
+    color: #ffd24a; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity 0.3s; text-align: center; white-space: nowrap; }
+  #saved { position: absolute; right: 250px; top: 14px; font-size: 20px; font-weight: 800; color: #7dff8a;
+    text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity 0.3s; }
+  #minimap { position: absolute; right: 14px; bottom: 14px; width: 220px; height: 220px;
+    border: 3px solid rgba(255,255,255,0.85); border-radius: 8px; background: #20242c; }
+  #mute-btn { position: absolute; right: 14px; bottom: 246px; pointer-events: auto; cursor: pointer;
+    background: rgba(10,10,16,0.6); color: #fff; border: 1px solid #fff; border-radius: 8px; padding: 6px 10px; font-size: 15px; }
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(12, 8, 20, 0.62); color: #fff; text-align: center; z-index: 10; }
+  .card { background: rgba(16, 12, 26, 0.88); border: 2px solid #ffd24a; border-radius: 16px; padding: 28px 40px; max-width: 640px; }
+  .card h1 { margin: 0 0 4px; font-size: 58px; letter-spacing: 3px; color: #ffd24a; text-shadow: 0 3px 0 #7a2a00; }
+  .card h2 { margin: 0 0 14px; font-size: 30px; color: #fff; }
+  .card p { font-size: 19px; line-height: 1.45; margin: 8px 0; color: #e8e8e8; }
+  .card .features { text-align: left; font-size: 18px; line-height: 1.6; margin: 12px auto; display: inline-block; }
+  .card button { pointer-events: auto; cursor: pointer; margin-top: 14px; font-size: 24px; font-weight: 800;
+    background: #ffd24a; color: #221100; border: none; border-radius: 10px; padding: 12px 34px; }
+  .card button.secondary { background: #444; color: #fff; font-size: 19px; padding: 10px 24px; margin-left: 10px; }
+  .gold { color: #ffd24a; font-weight: 800; }
+  #complete-saved { color: #7dff8a; }
 </style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
+<canvas id="game" aria-label="Solmar Heat: open-world kota Solmar — jalan kaki, mengemudi, misi, polisi"></canvas>
 <p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud">
+  <div id="top-left">
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="health-text">NYAWA 100</div>
+    <div id="money">$0</div>
+  </div>
+  <div id="top-right">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="clock">17:30</div>
+  </div>
+  <div id="bottom-left">
+    <div id="speed">JALAN KAKI</div>
+  </div>
+  <div id="hint">WASD / panah: gerak &amp; mengemudi &nbsp;•&nbsp; E: masuk/keluar mobil &nbsp;•&nbsp; F: pukul &nbsp;•&nbsp; Klik: tembak &nbsp;•&nbsp; Shift: lari &nbsp;•&nbsp; P: jeda &nbsp;•&nbsp; M: suara</div>
+  <div id="objective"></div>
+  <div id="toast"></div>
+  <div id="saved">✓ TERSIMPAN</div>
+  <canvas id="minimap" width="220" height="220"></canvas>
+  <button id="mute-btn">🔊 Suara: Hidup (M)</button>
+</div>
+
+<div id="title-screen" class="overlay">
+  <div class="card">
+    <h1>SOLMAR HEAT</h1>
+    <p>Kota pantai Solmar saat matahari terbenam. Kamu <b>Rex Marlowe</b>, sopir sewaan yang baru saja mengambil paket terakhirnya — dan paket itu milik orang yang salah.</p>
+    <div class="features">
+      ★ Kota open-world: jalan kaki &amp; mengemudi, lalu lintas &amp; pejalan kaki<br>
+      ★ Curi mobil, wanted level &amp; polisi yang mengejar<br>
+      ★ 3 misi cerita: Paket Pelabuhan, Pelarian, Curi dan Antar<br>
+      ★ Combat: pukulan &amp; pistol, geng rival, HUD + minimap, save otomatis
+    </div>
+    <p><b>Kontrol:</b> WASD / panah gerak &amp; mengemudi &nbsp;•&nbsp; E masuk/keluar mobil &nbsp;•&nbsp; F pukul &nbsp;•&nbsp; Klik tembak &nbsp;•&nbsp; Shift lari &nbsp;•&nbsp; P jeda &nbsp;•&nbsp; M suara</p>
+    <button id="start-btn">▶ MULAI</button><button id="continue-btn" class="secondary" style="display:none">↻ LANJUTKAN</button>
+    <p style="font-size:14px;color:#aaa">Semua nama, cerita, kendaraan dan seni orisinal — dibuat untuk Solmar Heat.</p>
+  </div>
+</div>
+
+<div id="pause-screen" class="overlay" style="display:none">
+  <div class="card">
+    <h2>JEDA</h2>
+    <p>Solmar menunggumu, Rex.</p>
+    <button id="resume-btn">▶ LANJUTKAN</button>
+    <p style="font-size:15px;color:#aaa">P / Esc untuk lanjut • M untuk suara</p>
+  </div>
+</div>
+
+<div id="complete-screen" class="overlay" style="display:none">
+  <div class="card">
+    <h2 id="complete-title">MISI SELESAI</h2>
+    <p id="complete-mission" class="gold" style="font-size:26px"></p>
+    <p id="complete-reward" style="font-size:24px"></p>
+    <p id="complete-total" style="font-size:24px"></p>
+    <p id="complete-saved" style="font-size:22px">✓ TERSIMPAN</p>
+    <button id="next-btn">▶ MISI BERIKUTNYA</button>
+  </div>
+</div>
+
+<div id="wasted-screen" class="overlay" style="display:none">
+  <div class="card">
+    <h2 style="color:#ff5a4e">TERTANGKAP</h2>
+    <p>Rex pingsan. Polisi membawanya ke rumah sakit — biaya $50.</p>
+    <button id="respawn-btn">▶ BANGKIT LAGI</button>
+  </div>
+</div>
+
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
