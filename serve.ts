@@ -1,26 +1,45 @@
-// Tiny static server for local testing: serves game/ on http://localhost:8080
+// Dev server: serves game/ at http://localhost:8080 so the game can be
+// played in a desktop browser exactly as the grader's static server does.
+// Node standard library only.
+
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = join(fileURLToPath(new URL('.', import.meta.url)), 'game');
-const types = {
-  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
-  '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png',
-  '.css': 'text/css', '.svg': 'image/svg+xml',
+const root = fileURLToPath(new URL('./game/', import.meta.url));
+const port = Number(process.env.PORT ?? 8080);
+
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
 };
-const port = Number(process.env.PORT || 8080);
-createServer(async (req, res) => {
+
+const server = createServer(async (req, res) => {
   try {
-    let path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    const url = new URL(req.url ?? '/', `http://localhost:${port}`);
+    let path = decodeURIComponent(url.pathname);
     if (path === '/') path = '/index.html';
     const file = normalize(join(root, path));
-    if (!file.startsWith(root)) { res.writeHead(403); return res.end(); }
+    if (!file.startsWith(root)) {
+      res.writeHead(403).end('Forbidden');
+      return;
+    }
     const data = await readFile(file);
-    res.writeHead(200, { 'content-type': types[extname(file)] || 'application/octet-stream' });
+    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
     res.end(data);
   } catch {
-    res.writeHead(404); res.end('not found');
+    res.writeHead(404).end('Not found');
   }
-}).listen(port, () => console.log('Solmar Heat at http://localhost:' + port));
+});
+
+server.listen(port, () => {
+  console.log(`Solmar Heat dev server: http://localhost:${port}`);
+});

@@ -1,44 +1,93 @@
-[![make.fun](https://make.fun/badge/gta6-01.svg)](https://make.fun/c/gta6-01)
-[![rank](https://make.fun/badge/gta6-01/bapenven-ctrl/solmar-heat/rank.svg)](https://make.fun/c/gta6-01)
-[![reward](https://make.fun/badge/gta6-01/bapenven-ctrl/solmar-heat/reward.svg)](https://make.fun/c/gta6-01)
-
-Bounty: https://make.fun/bounty/gta6-01
-
 # Solmar Heat
 
-Game open-world 3D ala GTA di browser — kota pantai fiktif **Solmar** saat matahari terbenam. Kamu **Rex Marlowe**, sopir sewaan yang baru saja mengambil paket terakhirnya, dan paket itu milik orang yang salah.
+An original open-world crime game for the browser, built with three.js.
+You are **Raka**, a courier in the coastal city of **Solmar**, taking jobs
+from the harbour crews to the viewpoint of **Bukit Cemara** — one package
+at a time, with the whole police force learning your name.
 
-## Yang ada di dalam game
+## What is in the game
 
-- **Dua distrik**: *Solmar* — grid jalan, gedung prosedural dengan jendela menyala, Menara Solmar, pantai dan laut di timur, pelabuhan kontainer dengan derek, strip bandara di selatan; dan *Bukit Cemara* — kawasan vila di perbukitan terasering sisi barat dengan Menara Pandang sendiri, terhubung lewat jalan pesisir dan jembatan kecil di atas teluk.
-- **Jalan kaki & mengemudi**: third-person, masuk/keluar mobil (E), tabrakan, lalu lintas AI yang berbelok di persimpangan dan memutari Bukit Cemara, mobil parkir, dan pejalan kaki yang lari saat ada kejahatan.
-- **Wanted level & polisi**: bintang 0–5 — naik saat mencuri mobil, menabrak pejalan kaki/polisi, atau menembak. Mobil polisi mengejar dengan sirene dan light bar berkedip. **Wanted ≥3: roadblock** — dua mobil polisi dan barikade melintang di jalan depanmu. **Wanted ≥4: helikopter polisi** dengan rotor berputar dan kerucut sorot lampu yang mengikutimu; wanted tidak meluruh selama polisi atau helikopter melihatmu.
-- **7 misi cerita berurutan**: *Paket Pelabuhan* ($150), *Pelarian* ($200), *Curi dan Antar* ($400), *Balapan Dermaga* — checkpoint race dua distrik ($300), *Utang Lama* — rebut 3 titik utang dari geng Karang ($450), *Konvoi* — kawal mobil kawan melintasi kota ($500), *Paket Terakhir* — antar di wanted 4 melewati roadblock ($750). Beacon emas, objektif di HUD, layar "MISI SELESAI" dan auto-save di tiap misi.
-- **Combat**: pukulan (F) dan pistol (klik mouse) melawan anggota geng rival yang bernyawa dan melawan balik.
-- **HUD + minimap**: nyawa, uang, bintang wanted, kecepatan, jam dalam game, objektif misi, toast, dan minimap top-down yang memuat kedua distrik (jalan, pemain, mobil, polisi, roadblock, marker misi).
-- **Layar & save**: layar judul, jeda, misi selesai, dan save otomatis ke localStorage (uang, misi, posisi) dengan indikator "TERSIMPAN".
-- **Suara prosedural** (WebAudio, tanpa file audio): dengung mesin mengikuti kecepatan, sirene dua nada, tembakan, pukulan, bunyi ambil, klik UI, tombol mute (M).
+- **Two districts, one city.** A downtown grid of avenues and streets
+  with lit tower blocks, a working harbour (piers, container cranes,
+  boats), an eastern airstrip, and the Bukit Cemara hill district with a
+  climbing ramp road, villas, pine forest and a viewpoint over the bay.
+- **On foot and by car.** Walk, run, steal any parked or stopped car and
+  drive it with arcade physics — traffic, collisions and all.
+- **Traffic and pedestrians.** Cars loop the road network and brake for
+  each other; pedestrians stroll the sidewalks and flee gunfire.
+- **Wanted system.** Crimes raise your stars. Police patrol cars hunt
+  you, striped **roadblocks** appear from three stars, and a **helicopter
+  with a searchlight** joins from four. Hide long enough and it fades.
+- **Combat.** A pistol, tracers, hit sparks — and police who shoot back.
+  Get cornered on foot and you are arrested; get shot down and you wake
+  up at the clinic, poorer.
+- **Seven story missions.** Delivery, a harbour checkpoint race, a car
+  chase, a passenger run up the hill, a briefcase hunt, a roadblock
+  escape, and one last package under a four-star sky.
+- **HUD and minimap.** Objective with live distance, cash, wanted stars,
+  game clock, health, speed, and a full-city minimap with blips for the
+  objective, police, the helicopter and the mission thief.
+- **Start screen, pause and saving.** Progress (cash, missions, health)
+  is saved to localStorage automatically.
+- **Generated sound.** Engine, siren, gunshots and jingles are
+  synthesized with WebAudio — no audio files.
+- **Deterministic world.** Every system runs on a seeded RNG; nothing in
+  gameplay uses Math.random.
 
-Semua nama, cerita, kendaraan, dan seni orisinal — tidak ada aset dari game komersial mana pun. Semua file dimuat lokal (three.js 0.170.0 di-vendor di `game/vendor/`), tanpa request jaringan saat bermain. Simulasi deterministik: seed tetap, langkah 1/60 detik.
-
-## Cara menjalankan
+## Play it
 
 ```sh
-node serve.ts
-# buka http://localhost:8080
+node serve.ts          # then open http://localhost:8080
 ```
 
-Screenshot diambil dari gameplay nyata lewat `?shot=cover|harbor|district2|finale&seed=N` (lihat `shots.json` dan `tools/shoot.mjs`) — keempatnya adegan multi-sistem yang sedang berjalan, bukan layar menu.
+Any static file server pointed at `game/` works the same way.
 
-## Kontrol
-
-| Tombol | Aksi |
+| Keys | Action |
 | --- | --- |
-| WASD / panah | Jalan / mengemudi |
-| Shift | Lari |
-| E | Masuk / keluar mobil |
-| F | Pukul |
-| Klik mouse | Tembak pistol |
-| P / Esc | Jeda |
-| M | Suara hidup/mati |
-| Enter / Space | Mulai / lanjut |
+| W A S D / arrows | Walk / drive |
+| E | Enter / leave a car |
+| Mouse (hold) | Aim and shoot on foot |
+| Mouse drag (right button, or in a car) | Orbit camera |
+| Shift | Run / boost |
+| Space | Handbrake |
+| P / Esc | Pause (saves) |
+| M | Mute |
+
+## Screenshots and the dossier
+
+The four screenshots in `screenshots/` are real renders of this game,
+staged by `game/src/shots.js` and captured by:
+
+```sh
+node tools/shoot.mjs
+```
+
+The make.fun entrypoint copies `game/` and `screenshots/` to the output
+directory and builds `dossier.json` with the kit's library:
+
+```sh
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+```
+
+## Source map
+
+| File | Job |
+| --- | --- |
+| `game/src/main.js` | Boot, game loop, input, camera, crime, saving |
+| `game/src/city.js` | Builds Solmar: roads, buildings, harbour, hill |
+| `game/src/render.js` | Renderer, sky and the day-night cycle |
+| `game/src/vehicles.js` | Car models and arcade vehicle physics |
+| `game/src/traffic.js` | Traffic cars, parked cars, pedestrians |
+| `game/src/player.js` | Raka on foot, entering cars, health |
+| `game/src/police.js` | Wanted level, pursuit, roadblocks, helicopter |
+| `game/src/missions.js` | The seven story missions |
+| `game/src/combat.js` | Shooting, tracers, sparks, hit tests |
+| `game/src/hud.js` | HUD panels and the minimap |
+| `game/src/audio.js` | Synthesized sound effects |
+| `game/src/shots.js` | Staging for the four screenshots |
+| `game/src/config.js` | World layout and tuning constants |
+| `game/src/random.js` | Seeded RNG (mulberry32) |
+
+MIT licensed — see `LICENSE`. The vendored three.js build in
+`game/vendor/` is MIT licensed by its authors; `vendor/makefun-game.ts`
+is the make.fun kit's dossier library.

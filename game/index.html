@@ -3,68 +3,156 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Solmar Heat — open-world crime di Solmar</title>
+<title>Solmar Heat — Kota Terbuka</title>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:100%; height:100%; overflow:hidden; background:#1a1426; font-family:'Segoe UI',system-ui,sans-serif; color:#f2ead8; }
-  #game { position:fixed; inset:0; width:100%; height:100%; display:block; }
-  .hud { position:fixed; z-index:5; pointer-events:none; }
-  #topbar { top:14px; left:16px; }
-  #mission-name { font-size:12px; letter-spacing:2px; color:#ffc93c; font-weight:700; }
-  #objective { margin-top:4px; font-size:16px; font-weight:600; text-shadow:0 1px 3px #000; max-width:46vw; }
-  #stats { top:14px; right:16px; text-align:right; }
-  #money { font-size:24px; font-weight:800; color:#7dd87d; text-shadow:0 1px 3px #000; }
-  #stars { font-size:20px; letter-spacing:2px; }
-  #clock { font-size:14px; opacity:.85; }
-  #healthwrap { position:fixed; left:16px; bottom:16px; width:210px; z-index:5; }
-  #healthbar { height:13px; background:#3a1420; border:1px solid #000; border-radius:3px; overflow:hidden; }
-  #health { height:100%; width:100%; background:linear-gradient(90deg,#c22e4d,#e85d7a); transition:width .2s; }
-  #speed { margin-top:5px; font-size:15px; font-weight:700; text-shadow:0 1px 2px #000; }
-  #minimap { position:fixed; right:16px; bottom:16px; width:176px; height:176px; border:2px solid rgba(255,255,255,.35); border-radius:6px; z-index:5; background:#20242e; }
-  #toast { top:16%; left:50%; transform:translateX(-50%); font-size:21px; font-weight:800; color:#ffc93c; text-shadow:0 2px 5px #000; opacity:0; transition:opacity .3s; text-align:center; z-index:6; }
-  #saved { right:200px; bottom:22px; font-size:12px; letter-spacing:2px; color:#9fe8a9; opacity:0; transition:opacity .3s; z-index:5; }
-  .screen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(16,10,26,.72); z-index:10; text-align:center; padding:20px; }
-  .screen h1 { font-size:52px; letter-spacing:3px; color:#ffc93c; text-shadow:0 3px 0 #a33, 0 6px 18px #000; }
-  .screen h2 { font-size:30px; color:#ffc93c; letter-spacing:2px; }
-  .screen p { margin-top:12px; font-size:16px; line-height:1.55; max-width:620px; }
-  .screen .key { display:inline-block; background:#2c3242; border:1px solid #667; border-bottom-width:3px; border-radius:4px; padding:0 7px; font-weight:700; }
-  #pause-screen, #complete-screen { display:none; }
-  .controls { margin-top:16px; font-size:13.5px; opacity:.9; line-height:1.9; }
+  :root {
+    --gold: #ffb340;
+    --panel: rgba(8, 14, 24, 0.62);
+    --panel-line: rgba(255, 179, 64, 0.55);
+    --ink: #f4f7fb;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1020; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: var(--ink); }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { display: block; width: 100%; height: 100%; }
+
+  .hud-panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 10px;
+    padding: 10px 14px;
+    backdrop-filter: blur(3px);
+    box-shadow: 0 4px 18px rgba(0,0,0,0.35);
+  }
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
+  #hud.on { display: block; }
+
+  #objective { position: absolute; top: 16px; left: 16px; max-width: 430px; }
+  #objective .mis-no { color: var(--gold); font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+  #objective .mis-title { font-size: 21px; font-weight: 800; letter-spacing: 0.4px; margin: 2px 0; }
+  #objective .mis-text { font-size: 14px; opacity: 0.92; }
+  #objective .mis-dist { color: var(--gold); font-weight: 700; }
+
+  #status { position: absolute; top: 16px; right: 16px; text-align: right; }
+  #cash { font-size: 24px; font-weight: 800; color: #7be495; }
+  #stars { font-size: 22px; letter-spacing: 3px; color: #ffd34d; text-shadow: 0 0 8px rgba(255,180,0,0.65); min-height: 26px; }
+  #stars .off { color: rgba(255,255,255,0.22); text-shadow: none; }
+  #clock { font-size: 13px; opacity: 0.85; letter-spacing: 1px; }
+
+  #vitals { position: absolute; left: 16px; bottom: 16px; width: 240px; }
+  #vitals .bar-label { font-size: 11px; letter-spacing: 2px; opacity: 0.85; display: flex; justify-content: space-between; }
+  #health-track { height: 12px; border-radius: 6px; background: rgba(255,255,255,0.16); overflow: hidden; margin: 4px 0 8px; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #e5484d, #ffb340); transition: width 0.18s; }
+  #speed { font-size: 26px; font-weight: 800; }
+  #speed small { font-size: 12px; font-weight: 600; opacity: 0.8; }
+  #gear { font-size: 12px; letter-spacing: 1px; opacity: 0.9; }
+
+  #minimap-wrap { position: absolute; right: 16px; bottom: 16px; padding: 6px; }
+  #minimap { display: block; width: 188px; height: 188px; border-radius: 6px; }
+
+  #toast {
+    position: absolute; top: 84px; left: 50%; transform: translateX(-50%);
+    font-size: 17px; font-weight: 700; letter-spacing: 0.4px; text-align: center;
+    padding: 9px 22px; opacity: 0; transition: opacity 0.25s;
+  }
+  #toast.show { opacity: 1; }
+  #banner {
+    position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%);
+    text-align: center; opacity: 0; transition: opacity 0.3s; padding: 20px 44px;
+  }
+  #banner.show { opacity: 1; }
+  #banner .big { font-size: 44px; font-weight: 900; letter-spacing: 3px; color: var(--gold); text-shadow: 0 3px 0 rgba(0,0,0,0.45); }
+  #banner .sub { font-size: 17px; margin-top: 6px; }
+  #crosshair {
+    position: absolute; top: 50%; left: 50%; width: 22px; height: 22px;
+    transform: translate(-50%, -50%); display: none;
+  }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: rgba(255,255,255,0.9); }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { left: 0; top: 10px; width: 22px; height: 2px; }
+  #crosshair.on { display: block; }
+  #vignette { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 140px rgba(229, 30, 30, 0); transition: box-shadow 0.15s; }
+
+  .screen {
+    position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, rgba(10, 8, 32, 0.55), rgba(64, 24, 8, 0.45) 55%, rgba(6, 10, 22, 0.78));
+    text-align: center; z-index: 5;
+  }
+  .screen h1 {
+    font-size: 84px; font-weight: 900; letter-spacing: 6px; line-height: 0.95;
+    color: #fff; text-shadow: 0 4px 0 #c2431f, 0 10px 34px rgba(0,0,0,0.6);
+  }
+  .screen h1 span { color: var(--gold); }
+  .screen .tag { font-size: 18px; letter-spacing: 3px; margin: 10px 0 30px; opacity: 0.95; }
+  .screen .btn {
+    pointer-events: auto; cursor: pointer; border: 2px solid var(--gold); color: #131313;
+    background: linear-gradient(180deg, #ffc95e, #ff9d2e); font-size: 19px; font-weight: 800; letter-spacing: 1px;
+    padding: 12px 42px; border-radius: 10px; margin: 6px; min-width: 300px;
+  }
+  .screen .btn.ghost { background: rgba(10, 14, 24, 0.7); color: var(--ink); }
+  .screen .btn:hover { filter: brightness(1.1); }
+  .screen .controls {
+    margin-top: 30px; display: grid; grid-template-columns: auto auto; gap: 4px 18px;
+    font-size: 14px; text-align: left; background: var(--panel); border: 1px solid var(--panel-line);
+    border-radius: 10px; padding: 14px 22px;
+  }
+  .screen .controls b { color: var(--gold); font-weight: 700; }
+  .screen .foot { margin-top: 22px; font-size: 12.5px; opacity: 0.75; letter-spacing: 1px; }
+  #pause-screen { display: none; }
 </style>
-<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 </head>
 <body>
-<canvas id="game"></canvas>
+<div id="stage"></div>
 
-<div class="hud" id="topbar">
-  <div id="mission-name">MISI 1/7</div>
-  <div id="objective"></div>
-</div>
-<div class="hud" id="stats">
-  <div id="money">$0</div>
-  <div id="stars">☆☆☆☆☆</div>
-  <div id="clock">18:00</div>
-</div>
-<div id="healthwrap">
-  <div id="healthbar"><div id="health"></div></div>
-  <div id="speed"></div>
-</div>
-<canvas id="minimap" width="176" height="176"></canvas>
-<div class="hud" id="toast"></div>
-<div class="hud" id="saved">✔ TERSIMPAN</div>
-
-<div class="screen" id="title-screen">
-  <h1>SOLMAR HEAT</h1>
-  <p>Kota pantai <b>Solmar</b> saat senja. Kamu <b>Rex Marlowe</b>, sopir sewaan yang mengambil paket milik orang yang salah.
-  Selesaikan <b>7 misi cerita</b> dari pelabuhan sampai Bukit Cemara — curi mobil, kabur dari polisi, kawal konvoi, dan antar Paket Terakhir melewati roadblock.</p>
-  <p style="margin-top:18px">Tekan <span class="key">Enter</span> untuk mulai</p>
-  <div class="controls">
-    <span class="key">W A S D</span> jalan / mengemudi · <span class="key">Shift</span> lari · <span class="key">E</span> masuk/keluar mobil ·
-    <span class="key">F</span> pukul · <span class="key">Klik</span> tembak · <span class="key">P</span>/<span class="key">Esc</span> jeda · <span class="key">M</span> suara
+<div id="hud">
+  <div id="objective" class="hud-panel">
+    <div class="mis-no" id="mis-no">SOLMAR HEAT</div>
+    <div class="mis-title" id="mis-title">Kota Solmar</div>
+    <div class="mis-text"><span id="mis-text">Jelajahi kota, ambil misi di penanda emas.</span> <span class="mis-dist" id="mis-dist"></span></div>
   </div>
+  <div id="status" class="hud-panel">
+    <div id="cash">$0</div>
+    <div id="stars"></div>
+    <div id="clock">06:00</div>
+  </div>
+  <div id="vitals" class="hud-panel">
+    <div class="bar-label"><span>NYAWA</span><span id="gear">DI JALAN</span></div>
+    <div id="health-track"><div id="health-fill"></div></div>
+    <div id="speed">0 <small>km/j</small></div>
+  </div>
+  <div id="minimap-wrap" class="hud-panel"><canvas id="minimap" width="376" height="376"></canvas></div>
+  <div id="toast" class="hud-panel"></div>
+  <div id="banner" class="hud-panel"><div class="big" id="banner-big">MISI SELESAI</div><div class="sub" id="banner-sub"></div></div>
+  <div id="crosshair"></div>
 </div>
-<div class="screen" id="pause-screen"><h2>JEDA</h2><p>Tekan <span class="key">P</span> atau <span class="key">Esc</span> untuk lanjut.</p></div>
-<div class="screen" id="complete-screen"><h2>MISI SELESAI</h2><p id="complete-text"></p><p>Tekan <span class="key">Enter</span> untuk lanjut.</p></div>
+<div id="vignette"></div>
+
+<div id="start-screen" class="screen">
+  <h1>SOLMAR <span>HEAT</span></h1>
+  <div class="tag">KOTA TERBUKA &bull; DUA DISTRIK &bull; TUJUH MISI</div>
+  <button class="btn" id="btn-new">MULAI BARU</button>
+  <button class="btn ghost" id="btn-continue" style="display:none">LANJUTKAN</button>
+  <div class="controls">
+    <span><b>W A S D</b></span><span>Jalan / gas / rem / belok</span>
+    <span><b>E</b></span><span>Masuk / keluar mobil</span>
+    <span><b>Mouse + Klik</b></span><span>Putar kamera / menembak</span>
+    <span><b>Shift</b></span><span>Lari / boost</span>
+    <span><b>Spasi</b></span><span>Rem tangan</span>
+    <span><b>P</b></span><span>Jeda &amp; simpan</span>
+  </div>
+  <div class="foot">KOTA SOLMAR &bull; PELABUHAN &bull; BUKIT CEMARA &bull; CERITA: PAKET TERAKHIR</div>
+</div>
+
+<div id="pause-screen" class="screen">
+  <h1 style="font-size:52px">JEDA</h1>
+  <div class="tag">PROGRES TERSIMPAN OTOMATIS</div>
+  <button class="btn" id="btn-resume">LANJUT MAIN</button>
+  <button class="btn ghost" id="btn-quit">KE MENU UTAMA</button>
+</div>
 
 <script type="module" src="./src/main.js"></script>
 </body>

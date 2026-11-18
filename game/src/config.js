@@ -1,34 +1,71 @@
-// Solmar Heat v2 — tuning constants and world layout shared by every system.
-export const STEP = 1 / 60;
+// World layout and tuning constants for Solmar Heat.
+// The city is laid out on a metre grid: downtown avenues run north-south at
+// fixed x positions, streets run east-west at fixed z positions, the harbour
+// fills the south shore, and Bukit Cemara rises to the north.
+
 export const WORLD = {
-  grid: 60,
-  mainMin: -240, mainMax: 240,
-  hillMinX: -580, hillMaxX: -300,
-  hillMinZ: -210, hillMaxZ: 210,
-  seaX: 285,
-  airportZ: 300,
+  // Downtown flat district.
+  downtown: { minX: -150, maxX: 150, minZ: -24, maxZ: 228 },
+  avenueX: [-120, -80, -40, 0, 40, 80, 120],
+  streetZ: [8, 52, 96, 140, 184, 224],
+  roadHalf: 7, // half width of a road surface
+  laneOffset: 3.4, // distance of a driving lane from the road centre line
+  blockGap: 15, // building lots start this far from a road centre line
+
+  // Harbour: water south of the quay line, piers reaching into it.
+  quayZ: -24,
+  waterZ: -260,
+
+  // Airstrip along the eastern edge.
+  strip: { minX: 168, maxX: 196, minZ: 8, maxZ: 224 },
+
+  // Bukit Cemara hill district: ramp corridor then a flat plateau.
+  hill: {
+    rampStartZ: 228,
+    rampTopZ: 316,
+    plateauZ: 316,
+    plateauHeight: 26,
+    minX: -130,
+    maxX: 130,
+    maxZ: 430,
+    roadHalf: 8,
+  },
 };
-export function groundHeight(x, z) {
-  if (x >= -292) return 0;
-  const t = Math.min(1, (-292 - x) / 270);
-  return Math.floor(t * 6) * 3;
-}
-export const COLORS = {
-  sky: 0x2c1e3f, fog: 0x59355a, sun: 0xffb36b,
-  road: 0x4a4459, roadHill: 0x554a63, sand: 0xc9a06b, sea: 0x1d5f73,
-  grass: 0x4c6a39, hillGround: 0x6b7a44,
-  building: [0x8a6f5c, 0x746a7d, 0x9c7a52, 0x5f7086, 0xa0855e, 0x685a6e],
-  villa: [0xd9c9a8, 0xcbb59a, 0xe3d3b8, 0xbfae90],
-  police: 0xf2f4f6, gang: 0x7a1f2b, playerCar: 0xd9822b,
+
+export const TUNING = {
+  playerWalkSpeed: 5.2,
+  playerRunSpeed: 8.6,
+  playerRadius: 0.55,
+  enterCarRange: 3.4,
+  carMaxSpeed: 34, // m/s, ~122 km/h
+  carMaxReverse: 9,
+  carAccel: 13.5,
+  carBrake: 26,
+  carDrag: 0.55,
+  carTurnRate: 1.55,
+  trafficCount: 26,
+  parkedCount: 22,
+  pedCount: 34,
+  copMaxSpeed: 36,
+  wantedDecaySeconds: 26, // unseen time for one star to fade
+  dayLengthSeconds: 600, // a full in-game day in free play
 };
-export const PLACES = {
-  harbor:   { x: 228, z: -150, label: 'Pelabuhan Solmar' },
-  drop1:    { x: -120, z: 120, label: 'Gudang Jalan Kenanga' },
-  hideout:  { x: -228, z: -228, label: 'Persembunyian Gang Melati' },
-  gangYard: { x: 180, z: 210, label: 'Markas Geng Karang' },
-  garage:   { x: -60, z: -180, label: 'Garasi Sinar Auto' },
-  lookout:  { x: -548, z: 78, label: 'Menara Pandang Bukit Cemara' },
-  airport:  { x: 120, z: 318, label: 'Strip Bandara Solmar' },
-  start:    { x: 204, z: -108, label: 'Dermaga' },
+
+export const PALETTE = {
+  skyDay: 0x8ec9e8,
+  sea: 0x1d6f8e,
+  sand: 0xd9c08a,
+  asphalt: 0x4a5058,
+  sidewalk: 0x9aa0a3,
+  grass: 0x69a24b,
+  hillRock: 0x8a7355,
+  roofTerracotta: 0xb5563c,
+  roofSlate: 0x4d5a68,
+  gold: 0xffb340,
+  policeBlue: 0x1d4ed8,
+  carColors: [
+    0xd94f30, 0x2e6fd8, 0xf2b035, 0x39b56a, 0xe8e6df, 0x22262b, 0x8e44ad,
+    0xd6336c, 0x1abc9c, 0x7f8c9b, 0xc0c6cc, 0x935116,
+  ],
+  buildingTones: [0xe8dcc4, 0xd9c8a9, 0xcfe0e8, 0xe6b8a2, 0xf0ead8, 0xbccdd6, 0xd8b4b0, 0xf2e3c6],
 };
-export const SAVE_KEY = 'solmar-heat-v2';
