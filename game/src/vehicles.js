@@ -1,145 +1,89 @@
-// Cars: how they look and how they drive. One mesh builder serves the
-// player's cars, parked cars, traffic and police — only the colour and the
-// light bar differ. Driving is simple arcade physics: accelerate, brake,
-// reverse, steer (less at speed), and slide out of buildings.
+// Car meshes and the shared arcade driving model used by the player,
+// traffic, police and the escort ally.
 import * as THREE from 'three';
-import { CAR } from './config.js';
-import { clampToCity, resolveBuildingCollision } from './city.js';
+import { groundHeight } from './config.js';
+import { collide } from './city.js';
 
-const CAR_COLORS = ['#c0392b', '#2471a3', '#d4ac0d', '#7d3c98', '#1e8449', '#b9770e', '#2e4053', '#a93226'];
+const dark = new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.6 });
+const glass = new THREE.MeshStandardMaterial({ color: 0x9fd4e8, roughness: 0.15, metalness: 0.4 });
+const tyre = new THREE.MeshStandardMaterial({ color: 0x141416, roughness: 1 });
 
-/** Pick a traffic colour from the seeded generator. */
-export function trafficColor(random) {
-  return CAR_COLORS[Math.floor(random() * CAR_COLORS.length)];
+export function makeCarMesh(color, opts = {}) {
+  const g = new THREE.Group();
+  const paint = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.5 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.62, 4.4), paint);
+  body.position.y = 0.62; g.add(body);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.58, 2.2), glass);
+  cab.position.set(0, 1.18, -0.25); g.add(cab);
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.3, 0.9), paint);
+  hood.position.set(0, 0.82, 1.95); g.add(hood);
+  for (const [x, z] of [[-1.0, 1.45], [1.0, 1.45], [-1.0, -1.45], [1.0, -1.45]]) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 10), tyre);
+    w.rotation.z = Math.PI / 2; w.position.set(x, 0.42, z); g.add(w);
+  }
+  const hl = new THREE.MeshBasicMaterial({ color: 0xfff2b0 });
+  for (const x of [-0.65, 0.65]) {
+    const h = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.18, 0.08), hl);
+    h.position.set(x, 0.66, 2.22); g.add(h);
+  }
+  if (opts.police) {
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.14, 0.3, 4.44),
+      new THREE.MeshStandardMaterial({ color: 0x2456a8, roughness: 0.4 }));
+    stripe.position.y = 0.6; g.add(stripe);
+    const bar = new THREE.Group();
+    const bl = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.18, 0.4),
+      new THREE.MeshBasicMaterial({ color: 0xff2a2a }));
+    bl.position.x = -0.3; bar.add(bl);
+    const br = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.18, 0.4),
+      new THREE.MeshBasicMaterial({ color: 0x2a5bff }));
+    br.position.x = 0.3; bar.add(br);
+    bar.position.set(0, 1.58, -0.25); g.add(bar);
+    g.userData.lightBar = bar; g.userData.lights = [bl, br];
+  }
+  if (opts.target) { // gold beacon ring marks the mission-3 steal target
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.14, 8, 28),
+      new THREE.MeshBasicMaterial({ color: 0xffc93c }));
+    ring.rotation.x = Math.PI / 2; ring.position.y = 0.25; g.add(ring);
+    g.userData.ring = ring;
+  }
+  g.traverse(o => { o.frustumCulled = true; });
+  return g;
 }
 
-/** Build a low-poly car mesh. `police` adds a black-and-white body and a light bar. */
-export function buildCarMesh(color, police) {
-  const group = new THREE.Group();
-  const bodyColor = police ? '#e8e8e8' : color;
-  const bodyMat = new THREE.MeshLambertMaterial({ color: bodyColor });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.75, 4.4), bodyMat);
-  body.position.y = 0.65;
-  group.add(body);
-  const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(1.7, 0.65, 2.2),
-    new THREE.MeshLambertMaterial({ color: police ? '#1a1a1a' : '#20242c' }),
-  );
-  cabin.position.set(0, 1.3, -0.2);
-  group.add(cabin);
-  if (police) {
-    const skirt = new THREE.Mesh(
-      new THREE.BoxGeometry(2.05, 0.3, 4.45),
-      new THREE.MeshLambertMaterial({ color: '#141414' }),
-    );
-    skirt.position.y = 0.35;
-    group.add(skirt);
+export class Car {
+  constructor(scene, color, x, z, heading, opts = {}) {
+    this.mesh = makeCarMesh(color, opts);
+    this.pos = new THREE.Vector3(x, groundHeight(x, z), z);
+    this.heading = heading; this.speed = 0; this.health = 100;
+    this.steerVis = 0; this.dead = false;
+    scene.add(this.mesh); this.sync();
   }
-  const wheelMat = new THREE.MeshLambertMaterial({ color: '#111111' });
-  const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.35, 10);
-  wheelGeo.rotateZ(Math.PI / 2);
-  for (const [x, z] of [[-0.95, 1.45], [0.95, 1.45], [-0.95, -1.45], [0.95, -1.45]]) {
-    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-    wheel.position.set(x, 0.42, z);
-    group.add(wheel);
+  // input: {f:-1..1 throttle, s:-1..1 steer}; returns distance moved.
+  drive(dt, input, colliders, maxSpeed = 34) {
+    const accel = input.f > 0 ? 15 : input.f < 0 ? -10 : 0;
+    this.speed += accel * dt;
+    this.speed -= this.speed * 0.55 * dt;                       // drag
+    if (input.f === 0) this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), 6 * dt);
+    this.speed = Math.max(-11, Math.min(maxSpeed, this.speed));
+    if (Math.abs(this.speed) > 0.4) this.heading += input.s * dt * 1.55 * Math.sign(this.speed) * Math.min(1, Math.abs(this.speed) / 9);
+    const ox = this.pos.x, oz = this.pos.z;
+    this.pos.x += Math.sin(this.heading) * this.speed * dt;
+    this.pos.z += Math.cos(this.heading) * this.speed * dt;
+    if (colliders) {
+      const before = Math.hypot(this.pos.x - ox, this.pos.z - oz);
+      collide(this.pos, 1.7, colliders);
+      const after = Math.hypot(this.pos.x - ox, this.pos.z - oz);
+      if (after < before * 0.45 && Math.abs(this.speed) > 7) { this.speed *= -0.25; this.health -= 3; this.crashed = true; }
+    }
+    this.pos.x = Math.max(-640, Math.min(275, this.pos.x));
+    this.pos.z = Math.max(-275, Math.min(345, this.pos.z));
+    this.pos.y = groundHeight(this.pos.x, this.pos.z);
+    this.sync();
+    return Math.abs(this.speed * dt);
   }
-  const headMat = new THREE.MeshLambertMaterial({ color: '#fff6c8', emissive: '#ffee88', emissiveIntensity: 0.7 });
-  for (const x of [-0.6, 0.6]) {
-    const light = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.18, 0.1), headMat);
-    light.position.set(x, 0.7, 2.22);
-    group.add(light);
+  sync() {
+    this.mesh.position.copy(this.pos);
+    this.mesh.rotation.set(0, this.heading, 0);
   }
-  let lightBar = null;
-  if (police) {
-    lightBar = new THREE.Group();
-    const red = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.22, 0.4),
-      new THREE.MeshLambertMaterial({ color: '#ff2222', emissive: '#ff2222', emissiveIntensity: 1.5 }),
-    );
-    red.position.x = -0.35;
-    const blue = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.22, 0.4),
-      new THREE.MeshLambertMaterial({ color: '#2244ff', emissive: '#2244ff', emissiveIntensity: 1.5 }),
-    );
-    blue.position.x = 0.35;
-    lightBar.add(red);
-    lightBar.add(blue);
-    lightBar.position.y = 1.75;
-    lightBar.userData = { red, blue };
-    group.add(lightBar);
-  }
-  return { group, lightBar };
-}
-
-/** A car record: position, heading, speed and its mesh. */
-export function createCar(scene, x, z, heading, color, police) {
-  const { group, lightBar } = buildCarMesh(color, police);
-  group.position.set(x, 0, z);
-  group.rotation.y = heading;
-  scene.add(group);
-  return {
-    mesh: group,
-    lightBar,
-    pos: new THREE.Vector3(x, 0, z),
-    heading,
-    speed: 0,
-    kind: police ? 'police' : 'traffic',
-    color,
-    active: true,
-    lastRamAt: -99,
-    turnCooldown: 0,
-    stopped: false,
-  };
-}
-
-/** Flash the police light bar: red on one beat, blue on the next. */
-export function flashLightBar(car, time) {
-  if (!car.lightBar) return;
-  const on = Math.floor(time / 0.25) % 2 === 0;
-  car.lightBar.userData.red.material.emissiveIntensity = on ? 2.2 : 0.15;
-  car.lightBar.userData.blue.material.emissiveIntensity = on ? 0.15 : 2.2;
-}
-
-/**
- * Drive one car one fixed step. `drive` is {throttle, brake, steer} with
- * steer -1..1. Returns true when the car hit a building this step.
- */
-export function driveCar(car, drive, dt, colliders) {
-  const forward = new THREE.Vector3(-Math.sin(car.heading), 0, -Math.cos(car.heading));
-  if (drive.throttle > 0) car.speed += CAR.accel * drive.throttle * dt;
-  if (drive.brake > 0) {
-    if (car.speed > 0.5) car.speed -= CAR.brake * drive.brake * dt;
-    else car.speed -= CAR.reverseAccel * drive.brake * dt;
-  }
-  if (drive.throttle <= 0 && drive.brake <= 0) car.speed -= Math.sign(car.speed) * 6 * dt;
-  car.speed = Math.max(-CAR.maxReverse, Math.min(CAR.maxSpeed, car.speed));
-  if (Math.abs(car.speed) < 0.05 && drive.throttle <= 0 && drive.brake <= 0) car.speed = 0;
-  const steerAuthority = Math.min(1, Math.abs(car.speed) / 6);
-  car.heading -= drive.steer * CAR.turnRate * steerAuthority * Math.sign(car.speed || 1) * dt;
-  const next = car.pos.clone().addScaledVector(forward, car.speed * dt);
-  clampToCity(next);
-  const hit = resolveBuildingCollision(next, CAR.radius, colliders);
-  if (hit) car.speed *= 0.45;
-  car.pos.copy(next);
-  car.mesh.position.copy(car.pos);
-  car.mesh.rotation.y = car.heading;
-  return hit;
-}
-
-/** Keep two cars from overlapping: push them apart along the line between them. */
-export function separateCars(a, b) {
-  const dx = b.pos.x - a.pos.x;
-  const dz = b.pos.z - a.pos.z;
-  const dist = Math.hypot(dx, dz);
-  const min = CAR.radius * 1.6;
-  if (dist >= min || dist < 0.001) return;
-  const push = (min - dist) / 2;
-  const nx = dx / dist;
-  const nz = dz / dist;
-  a.pos.x -= nx * push;
-  a.pos.z -= nz * push;
-  b.pos.x += nx * push;
-  b.pos.z += nz * push;
-  a.mesh.position.copy(a.pos);
-  b.mesh.position.copy(b.pos);
+  get x() { return this.pos.x; } get z() { return this.pos.z; }
 }

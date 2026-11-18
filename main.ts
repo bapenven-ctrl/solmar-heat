@@ -1,19 +1,7 @@
-// Solmar Heat — a gta6-01 entry (Node 22, standard library only).
-//
-// The game lives in this directory's game/ folder: plain static files a
-// desktop browser loads offline (game/index.html plus its ES modules and a
-// vendored three.js under game/vendor/), with no network request while it
-// runs. This program hands the entry in: it copies game/ and screenshots/
-// from beside this file into the output directory and writes
-// dossier.json there with the vendored make.fun library, so the judge can
-// read the screenshots and the source outline.
-//
-// Run it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for
-// /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-// Run it twice and the dossier comes out byte for byte identical.
-
+// Solmar Heat v2 — entry point for the gta6-01 grader (Node 22, stdlib only).
+// Copies game/ and screenshots/ beside this file into the output directory
+// (MAKEFUN_OUTPUT_DIR or /output) and writes dossier.json there with the
+// vendored make.fun library, using the scorer's own caps.
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,12 +17,6 @@ if (existsSync(join(here, 'screenshots'))) {
   cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 }
 
-// The scorer's caps, copied from the kit's reference/gate.json. Only
-// text_max_bytes shapes the dossier's bytes; the rest refuse an entry the
-// scorer would refuse anyway: at most 4 screenshots and none over 256 KiB;
-// at most 993 files in game/ totalling 48 MiB, with no game path over
-// 1000 bytes. game/ shares /output's own 1000-entry, 64 MiB cap with
-// screenshots/ and dossier.json, so the copies above must leave it room.
 writeFileSync(
   join(out, 'dossier.json'),
   buildDossier(out, {
@@ -45,3 +27,4 @@ writeFileSync(
     game_path_max_bytes: 1000,
   }),
 );
+console.log('Solmar Heat v2 handed in to', out);

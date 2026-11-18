@@ -1,480 +1,172 @@
-// Boot and the one loop: input is read every frame, the world advances in
-// fixed 1/60 s steps (several in a slow frame, none in a fast one), and the
-// renderer paints what is there. The game moves between five screens:
-// title, play, paused, mission complete and wasted.
-//
-// ?seed=N fixes the city and the traffic. ?shot=cover|start|chase|mission
-// (with &seed=N) stages that scene instead of running the loop, paints it
-// twice and sets window.__shotReady for a screenshot.
-import * as THREE from 'three';
-import { CAR, PLAYER, SAVE_KEY, STEP } from './config.js';
-import { createSeededRandom } from './random.js';
+// Boot, input, the fixed-step loop, crime/wanted bookkeeping and saves.
+import { STEP, PLACES, SAVE_KEY, groundHeight } from './config.js';
+import { makeRng } from './random.js';
+import { createStage } from './render.js';
 import { buildCity } from './city.js';
-import { createRender } from './render.js';
-import { createPlayer, enterCar, exitCar, nearestCarToEnter, walkPlayer } from './player.js';
-import { createTraffic, scarePedestrians, updateTraffic } from './traffic.js';
-import { addWanted, createPoliceSystem, updatePolice } from './police.js';
-import { createMissions } from './missions.js';
-import { createCombat } from './combat.js';
-import {
-  SCREEN_COMPLETE,
-  SCREEN_PAUSED,
-  SCREEN_PLAY,
-  SCREEN_TITLE,
-  SCREEN_WASTED,
-  createHud,
-} from './hud.js';
-import { createSoundEngine } from './audio.js';
-import { stageShot } from './shots.js';
-import { driveCar, separateCars } from './vehicles.js';
+import { Traffic, Pedestrians } from './traffic.js';
+import { Player } from './player.js';
+import { Police } from './police.js';
+import { Combat } from './combat.js';
+import { Missions } from './missions.js';
+import { Hud } from './hud.js';
+import { AudioSys } from './audio.js';
+import { applyShot } from './shots.js';
 
-/** The longest frame the loop catches up on; a longer stall is dropped. */
-const MAX_FRAME = 0.25;
-const SAVE_INTERVAL = 10;
+const params = new URLSearchParams(location.search);
+const seed = parseInt(params.get('seed') || '7', 10);
+const shotName = params.get('shot');
+const rng = makeRng(seed);
 
-const params = new URLSearchParams(window.location.search);
-const shot = params.get('shot');
-const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
-const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() * 4294967296);
+const stage = createStage(document.getElementById('game'));
+const city = buildCity(stage.scene, rng);
+const traffic = new Traffic(stage.scene, rng, city.colliders);
+const peds = new Pedestrians(stage.scene, rng);
+const player = new Player(stage.scene, rng, PLACES.start.x, PLACES.start.z);
+const police = new Police(stage.scene);
+const combat = new Combat(stage.scene, rng);
+const hud = new Hud();
+const audio = new AudioSys();
 
-const errors = [];
-window.__gameErrors = errors;
-window.addEventListener('error', (event) => errors.push(String(event.message || event.error)));
-const realConsoleError = console.error.bind(console);
-console.error = (...args) => {
-  errors.push(args.map(String).join(' '));
-  realConsoleError(...args);
-};
-
-const canvas = document.getElementById('game');
-const status = document.getElementById('status');
-
-/** Build a fresh game world from a seed: renderer, city, player, traffic. */
-export function createGame(seedValue) {
-  const rng = createSeededRandom(seedValue);
-  const render = createRender(canvas);
-  const scene = render.scene;
-  const city = buildCity(scene, rng);
-  const player = createPlayer(scene);
-  const traffic = createTraffic(scene, rng, city.colliders);
-  const police = createPoliceSystem(scene, rng);
-  const audio = createSoundEngine();
-
-  const game = {
-    seed: seedValue,
-    rng,
-    scene,
-    camera: render.camera,
-    city,
-    player,
-    traffic,
-    police,
-    audio,
-    gang: [],
-    screen: SCREEN_TITLE,
-    time: 0,
-    money: 0,
-    health: PLAYER.maxHealth,
-    wanted: 0,
-    cameraYaw: player.heading,
-    missionsStarted: false,
-    policeHitCooldown: 0,
-    saveTimer: SAVE_INTERVAL,
-    missions: null,
-    combat: null,
-    hud: null,
-  };
-
-  game.missions = createMissions(game);
-  game.combat = createCombat(game);
-  game.hud = createHud(game);
-
-  function announce(message) {
-    status.textContent = message;
-  }
-
-  function setScreen(next) {
-    game.screen = next;
-    game.hud.showOnly(next);
-  }
-
-  function saveGame() {
+const G = {
+  scene: stage.scene, stage, player, police, traffic, combat, hud, audio,
+  colliders: city.colliders, missions: null,
+  money: 0, wanted: 0, time: 0, mode: shotName ? 'play' : 'title',
+  hideoutTime: 0, policeSeen: false, groundAt: groundHeight,
+  setWanted(n) { G.wanted = Math.max(0, Math.min(5, n)); },
+  crime(n, cooldown = 1.2) {
+    if (G.time < (G.crimeCool || 0)) return;
+    G.crimeCool = G.time + cooldown; G.setWanted(G.wanted + n);
+  },
+  onRam() { audio.punch(); hud.toast('Polisi menabrakmu!'); },
+  onPlayerHurt() { if (player.health <= 0) G.respawn(); },
+  onGuardDown() { audio.pickup(); },
+  onMissionComplete(def) {
+    G.mode = 'complete'; hud.showComplete(def); audio.pickup(); G.save();
+  },
+  respawn() {
+    player.health = 100; G.setWanted(0); G.money = Math.max(0, G.money - 50);
+    if (player.car) player.exit();
+    player.pos.set(PLACES.start.x, 0, PLACES.start.z); player.pos.y = groundHeight(player.pos.x, player.pos.z);
+    player.sync(); hud.toast('Kamu pingsan — bangun di dermaga, -$50');
+  },
+  save() {
     try {
-      window.localStorage.setItem(SAVE_KEY, JSON.stringify({
-        money: game.money,
-        missionIndex: game.missions.state.index,
-        x: game.player.pos.x,
-        z: game.player.pos.z,
-        health: game.health,
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        money: G.money, mission: G.missions.index,
+        x: Math.round(player.x), z: Math.round(player.z),
       }));
-      game.hud.flashSaved();
-    } catch {
-      // Storage can be off: the save then lasts this visit only.
+      hud.flashSaved();
+    } catch (e) { /* storage unavailable */ }
+  },
+};
+G.missions = new Missions(G);
+const missions = G.missions;
+
+// Restore a previous run (never in staged-shot mode).
+if (!shotName) {
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    if (s) { G.money = s.money | 0; missions.start(Math.min(6, s.mission | 0)); }
+    else missions.start(0);
+  } catch (e) { missions.start(0); }
+} else {
+  missions.start(0);
+  applyShot(G, shotName);
+}
+hud.showTitle(G.mode === 'title');
+window.__game = G;
+
+// --- input
+const keys = {};
+addEventListener('keydown', (e) => {
+  keys[e.code] = true; audio.ensure();
+  if (e.code === 'Enter' || e.code === 'Space') {
+    if (G.mode === 'title') { G.mode = 'play'; hud.showTitle(false); audio.click(); }
+    else if (G.mode === 'complete') { G.mode = 'play'; hud.hideComplete(); audio.click(); }
+  }
+  if ((e.code === 'KeyP' || e.code === 'Escape') && (G.mode === 'play' || G.mode === 'pause')) {
+    G.mode = G.mode === 'play' ? 'pause' : 'play'; hud.showPause(G.mode === 'pause');
+  }
+  if (e.code === 'KeyM') hud.toast(audio.toggleMute() ? 'Suara mati' : 'Suara hidup', 1.2);
+  if (e.code === 'KeyE' && G.mode === 'play') {
+    if (player.car) player.exit();
+    else {
+      const car = player.nearestCar([...traffic.allCars(), player.ownCar, missions.targetCar, missions.ally].filter(Boolean));
+      if (car) {
+        const res = player.enter(car);
+        if (res === 'stolen') { G.crime(2); hud.toast('Mobil dicuri! Wanted naik'); audio.click(); }
+      }
     }
   }
-
-  function loadSave() {
-    try {
-      const raw = window.localStorage.getItem(SAVE_KEY);
-      if (!raw) return null;
-      const data = JSON.parse(raw);
-      if (typeof data.money !== 'number') return null;
-      return data;
-    } catch {
-      return null;
-    }
+  if (e.code === 'KeyF' && G.mode === 'play' && !player.car) {
+    audio.ensure();
+    if (combat.punch(G)) { audio.punch(); G.crime(1); } else audio.punch();
   }
-
-  function startPlay(resumeSave) {
-    audio.unlock();
-    if (resumeSave) {
-      const save = loadSave();
-      if (save) {
-        game.money = save.money;
-        game.health = save.health || PLAYER.maxHealth;
-        game.player.pos.set(save.x || PLAYER.spawn.x, 0, save.z || PLAYER.spawn.z);
-        game.player.mesh.position.copy(game.player.pos);
-        game.missions.startMission(Math.min(save.missionIndex || 0, 2));
-        game.missionsStarted = true;
-        announce(`Lanjutkan. Misi ${game.missions.state.index + 1}.`);
-      }
-    }
-    if (!game.missionsStarted) {
-      game.missions.startMission(0);
-      game.missionsStarted = true;
-    }
-    setScreen(SCREEN_PLAY);
-    announce('Bermain. Ikuti objektif misi di layar.');
-  }
-
-  function respawn() {
-    if (game.player.car) exitCar(game.player);
-    game.player.pos.set(PLAYER.spawn.x, 0, PLAYER.spawn.z);
-    game.player.mesh.position.copy(game.player.pos);
-    game.player.heading = Math.PI;
-    game.health = PLAYER.maxHealth;
-    game.wanted = 0;
-    game.cameraYaw = Math.PI;
-    setScreen(SCREEN_PLAY);
-    announce('Rex bangkit lagi di persimpangan.');
-  }
-
-  function damagePlayer(amount, reason) {
-    if (game.player.invulnerable > 0 || game.screen !== SCREEN_PLAY) return;
-    game.health -= amount;
-    game.player.invulnerable = 0.8;
-    game.hud.toast(reason);
-    if (game.health <= 0) {
-      game.health = 0;
-      game.money = Math.max(0, game.money - 50);
-      saveGame();
-      setScreen(SCREEN_WASTED);
-      game.hud.showWasted();
-      announce('Tertangkap. Bangkit lagi?');
-    }
-  }
-
-  game.damagePlayer = damagePlayer;
-  game.saveGame = saveGame;
-  game.loadSave = loadSave;
-  game.startPlay = startPlay;
-  game.setScreen = setScreen;
-
-  /** One fixed step of the world, driven by `input` (live keys or autopilot). */
-  game.step = function step(dt, input) {
-    if (game.screen === SCREEN_TITLE) {
-      game.time += dt;
-      updateTraffic(traffic, rng, dt, city.colliders, player.pos);
-      return;
-    }
-    if (game.screen !== SCREEN_PLAY) return;
-    game.time += dt;
-    if (game.policeHitCooldown > 0) game.policeHitCooldown -= dt;
-    if (input.mutePressed) {
-      audio.toggleMute();
-      input.mutePressed = false;
-    }
-
-    if (input.enterPressed) {
-      input.enterPressed = false;
-      if (player.onFoot) {
-        const car = nearestCarToEnter(player, traffic.cars);
-        if (car) {
-          if (car.kind === 'parked') {
-            addWanted(game, 1, 'Mencuri mobil');
-            scarePedestrians(traffic, player.pos, 18);
-          }
-          enterCar(player, car);
-          audio.click();
-        }
-      } else {
-        exitCar(player);
-        audio.click();
-      }
-    }
-    if (input.punchPressed) {
-      input.punchPressed = false;
-      game.combat.punch();
-    }
-    if (input.shootPressed) {
-      input.shootPressed = false;
-      game.combat.shoot();
-    }
-
-    if (player.onFoot) {
-      walkPlayer(player, { x: input.moveX, z: input.moveZ }, input.run, dt, city.colliders);
-      audio.engine(0);
-      if (player.speed > 0.5) {
-        game.cameraYaw += wrapAngle(player.heading - game.cameraYaw) * Math.min(1, dt * 3);
-      }
-    } else {
-      const car = player.car;
-      const hitBuilding = driveCar(car, {
-        throttle: input.driveThrottle,
-        brake: input.driveBrake,
-        steer: input.driveSteer,
-      }, dt, city.colliders);
-      if (hitBuilding && Math.abs(car.speed) > 12) {
-        game.hud.toast('Tabrakan!');
-      }
-      game.cameraYaw += wrapAngle(car.heading - game.cameraYaw) * Math.min(1, dt * 4);
-      audio.engine(Math.abs(car.speed) / CAR.maxSpeed);
-      // Hitting a pedestrian with the car is a crime.
-      for (const ped of traffic.pedestrians) {
-        if (ped.hitCooldown > 0) continue;
-        const dist = Math.hypot(ped.pos.x - car.pos.x, ped.pos.z - car.pos.z);
-        if (dist < 2.6 && Math.abs(car.speed) > 3) {
-          ped.hitCooldown = 5;
-          addWanted(game, 1, 'Menabrak pejalan kaki');
-          scarePedestrians(traffic, car.pos, 20);
-          car.speed *= 0.6;
-        }
-      }
-      // Ramming a police car hard is a crime too.
-      for (const cop of police.cars) {
-        const dist = Math.hypot(cop.pos.x - car.pos.x, cop.pos.z - car.pos.z);
-        if (dist < 4 && Math.abs(car.speed) > 10 && game.policeHitCooldown <= 0) {
-          game.policeHitCooldown = 3;
-          addWanted(game, 1, 'Menabrak mobil polisi');
-        }
-      }
-    }
-
-    // Keep cars from overlapping each other.
-    const cars = traffic.cars;
-    for (let i = 0; i < cars.length; i += 1) {
-      if (!cars[i].active) continue;
-      for (let j = i + 1; j < cars.length; j += 1) {
-        if (cars[j].active) separateCars(cars[i], cars[j]);
-      }
-    }
-
-    updateTraffic(traffic, rng, dt, city.colliders, player.pos);
-    updatePolice(police, game, dt);
-    game.missions.update(dt);
-    game.combat.update(dt);
-
-    if (game.player.invulnerable > 0) game.player.invulnerable -= dt;
-    if (game.wanted === 0 && game.health < PLAYER.maxHealth) {
-      game.health = Math.min(PLAYER.maxHealth, game.health + 2 * dt);
-    }
-    game.saveTimer -= dt;
-    if (game.saveTimer <= 0) {
-      game.saveTimer = SAVE_INTERVAL;
-      saveGame();
-    }
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+});
+addEventListener('keyup', (e) => { keys[e.code] = false; });
+addEventListener('mousedown', () => {
+  audio.ensure();
+  if (G.mode === 'play' && !player.car) { if (combat.shoot(G)) G.crime(1); audio.shot(); }
+});
+function readInput() {
+  return {
+    up: !!(keys.KeyW || keys.ArrowUp), down: !!(keys.KeyS || keys.ArrowDown),
+    left: !!(keys.KeyA || keys.ArrowLeft), right: !!(keys.KeyD || keys.ArrowRight),
+    run: !!(keys.ShiftLeft || keys.ShiftRight),
+    f: (keys.KeyW || keys.ArrowUp) ? 1 : (keys.KeyS || keys.ArrowDown) ? -1 : 0,
+    s: (keys.KeyA || keys.ArrowLeft) ? 1 : (keys.KeyD || keys.ArrowRight) ? -1 : 0,
+    camYaw: 0,
   };
-
-  /** Paint one frame: the camera, the HUD and the 3D scene. */
-  game.draw = function draw(dt) {
-    if (game.screen === SCREEN_TITLE) {
-      render.orbitCamera(game.time);
-    } else {
-      const focus = player.onFoot ? player.pos : player.car.pos;
-      render.followCamera(focus, game.cameraYaw, player.onFoot ? 9 : 13, player.onFoot ? 4.2 : 6, city.colliders, dt);
-    }
-    if (game.screen === SCREEN_PLAY || game.screen === SCREEN_COMPLETE) game.hud.update(dt);
-    render.render();
-  };
-
-  return game;
 }
 
-function wrapAngle(angle) {
-  while (angle > Math.PI) angle -= Math.PI * 2;
-  while (angle < -Math.PI) angle += Math.PI * 2;
-  return angle;
-}
-
-// ---- Live input: held keys plus one-shot presses queued between frames. ----
-const keys = new Set();
-let actions = 0;
-const ACTION_ENTER = 1;
-const ACTION_PUNCH = 2;
-const ACTION_SHOOT = 4;
-const ACTION_PAUSE = 8;
-const ACTION_CONFIRM = 16;
-const ACTION_MUTE = 32;
-
-const game = createGame(seed);
-
-function liveInput() {
-  const forward = keys.has('KeyW') || keys.has('ArrowUp');
-  const back = keys.has('KeyS') || keys.has('ArrowDown');
-  const left = keys.has('KeyA') || keys.has('ArrowLeft');
-  const right = keys.has('KeyD') || keys.has('ArrowRight');
-  const fx = -Math.sin(game.cameraYaw);
-  const fz = -Math.cos(game.cameraYaw);
-  const rx = -fz;
-  const rz = fx;
-  const along = (forward ? 1 : 0) - (back ? 1 : 0);
-  const side = (right ? 1 : 0) - (left ? 1 : 0);
-  const input = {
-    driveThrottle: forward ? 1 : 0,
-    driveBrake: back ? 1 : 0,
-    driveSteer: side,
-    moveX: fx * along + rx * side,
-    moveZ: fz * along + rz * side,
-    run: keys.has('ShiftLeft') || keys.has('ShiftRight'),
-    enterPressed: false,
-    punchPressed: false,
-    shootPressed: false,
-    mutePressed: false,
-  };
-  if (actions & ACTION_ENTER) input.enterPressed = true;
-  if (actions & ACTION_PUNCH) input.punchPressed = true;
-  if (actions & ACTION_SHOOT) input.shootPressed = true;
-  if (actions & ACTION_MUTE) input.mutePressed = true;
-  actions = 0;
-  return input;
-}
-
-function takeActionFlags() {
-  const taken = actions;
-  actions = 0;
-  return taken;
-}
-
-window.addEventListener('keydown', (event) => {
-  if (event.code === 'KeyE' && !event.repeat) actions |= ACTION_ENTER;
-  else if (event.code === 'KeyF' && !event.repeat) actions |= ACTION_PUNCH;
-  else if ((event.code === 'KeyP' || event.code === 'Escape') && !event.repeat) actions |= ACTION_PAUSE;
-  else if ((event.code === 'Enter' || event.code === 'Space') && !event.repeat) actions |= ACTION_CONFIRM;
-  else if (event.code === 'KeyM' && !event.repeat) actions |= ACTION_MUTE;
-  keys.add(event.code);
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) event.preventDefault();
-});
-window.addEventListener('keyup', (event) => keys.delete(event.code));
-window.addEventListener('blur', () => keys.clear());
-canvas.addEventListener('pointerdown', (event) => {
-  game.audio.unlock();
-  if (event.button === 0) actions |= ACTION_SHOOT;
-});
-
-document.getElementById('start-btn').addEventListener('click', () => {
-  game.audio.unlock();
-  game.audio.click();
-  game.startPlay(false);
-});
-document.getElementById('continue-btn').addEventListener('click', () => {
-  game.audio.unlock();
-  game.audio.click();
-  game.startPlay(true);
-});
-document.getElementById('resume-btn').addEventListener('click', () => {
-  game.audio.click();
-  game.setScreen(SCREEN_PLAY);
-});
-document.getElementById('next-btn').addEventListener('click', () => {
-  game.audio.click();
-  game.missions.nextMission();
-  game.setScreen(SCREEN_PLAY);
-});
-document.getElementById('respawn-btn').addEventListener('click', () => {
-  game.audio.click();
-  game.startPlay(false);
-  game.health = PLAYER.maxHealth;
-  game.wanted = 0;
-  game.player.pos.set(PLAYER.spawn.x, 0, PLAYER.spawn.z);
-  game.player.mesh.position.copy(game.player.pos);
-});
-game.hud.muteButton.addEventListener('click', () => {
-  game.audio.unlock();
-  game.audio.toggleMute();
-});
-
-if (game.loadSave()) document.getElementById('continue-btn').style.display = 'inline-block';
-
-function runShot(name) {
-  const screen = stageShot(name, game);
-  game.setScreen(screen);
-  let painted = 0;
-  function paint() {
-    game.draw(STEP);
-    painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
-    else window.__shotReady = true;
-  }
-  requestAnimationFrame(paint);
-}
-
-function runGame() {
-  let accumulator = 0;
-  let last = performance.now();
-
-  function handleActions() {
-    const flags = takeActionFlags();
-    // Pause, confirm and mute belong to the screens; the rest (enter the
-    // car, punch, shoot) is handed back so the next step can use it.
-    actions |= flags & (ACTION_ENTER | ACTION_PUNCH | ACTION_SHOOT);
-    if (flags & ACTION_MUTE) game.audio.toggleMute();
-    if (flags & ACTION_PAUSE) {
-      if (game.screen === SCREEN_PLAY) {
-        game.setScreen(SCREEN_PAUSED);
-        status.textContent = 'Jeda.';
-      } else if (game.screen === SCREEN_PAUSED) {
-        game.setScreen(SCREEN_PLAY);
-        status.textContent = 'Bermain.';
-      }
-    }
-    if (flags & ACTION_CONFIRM) {
-      if (game.screen === SCREEN_TITLE) game.startPlay(false);
-      else if (game.screen === SCREEN_COMPLETE) {
-        game.missions.nextMission();
-        game.setScreen(SCREEN_PLAY);
-      } else if (game.screen === SCREEN_WASTED) {
-        game.startPlay(false);
-        game.health = PLAYER.maxHealth;
-        game.wanted = 0;
-        game.player.pos.set(PLAYER.spawn.x, 0, PLAYER.spawn.z);
-        game.player.mesh.position.copy(game.player.pos);
+// --- per-step simulation
+let decayT = 0, saveT = 0, pedHitCool = 0;
+function step(dt) {
+  G.time += dt;
+  const input = readInput();
+  player.update(dt, input, city.colliders, traffic.allCars());
+  if (player.bumpEvent) { player.bumpEvent = false; }
+  traffic.update(dt);
+  police.update(dt, G);
+  combat.update(dt, G);
+  missions.update(dt);
+  peds.update(dt, { x: player.x, z: player.z, alarm: (G.wanted > 0 || G.time < (G.crimeCool || 0)) ? 1 : 0 });
+  city.update(dt);
+  // Running down a pedestrian is a crime and costs health of the car.
+  pedHitCool -= dt;
+  if (player.car && Math.abs(player.car.speed) > 6 && pedHitCool <= 0) {
+    for (const p of peds.list) {
+      if (Math.hypot(p.x - player.x, p.z - player.z) < 2.3) {
+        pedHitCool = 2; p.panic = 3; G.crime(1); hud.toast('Kamu menabrak pejalan kaki!');
+        break;
       }
     }
   }
+  // Wanted decays only while nobody in uniform can see Rex.
+  if (G.wanted > 0 && !G.policeSeen && missions.current()?.t !== 'escape') {
+    decayT += dt; if (decayT > 6) { decayT = 0; G.setWanted(G.wanted - 1); }
+  } else decayT = 0;
+  if (player.health <= 0) G.respawn();
+  saveT += dt; if (saveT > 6) { saveT = 0; if (G.mode === 'play') G.save(); }
+  audio.update(dt, player.speedNow, !!player.car, police.units.length > 0 && G.wanted > 0);
+}
 
-  function frame(now) {
-    requestAnimationFrame(frame);
-    accumulator += Math.min((now - last) / 1000, MAX_FRAME);
-    last = now;
-    handleActions();
-    if (game.screen === SCREEN_TITLE || game.screen === SCREEN_PLAY) {
-      while (accumulator >= STEP && (game.screen === SCREEN_TITLE || game.screen === SCREEN_PLAY)) {
-        game.step(STEP, liveInput());
-        accumulator -= STEP;
-      }
-    } else {
-      accumulator = 0;
-    }
-    game.draw(STEP);
-  }
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && game.screen === SCREEN_PLAY) game.setScreen(SCREEN_PAUSED);
-  });
-
-  status.textContent = 'Solmar Heat. Tekan Enter atau klik MULAI.';
+let last = performance.now() / 1000, acc = 0, firstFrame = true;
+function frame() {
   requestAnimationFrame(frame);
+  const now = performance.now() / 1000;
+  let dt = Math.min(0.1, now - last); last = now;
+  if (G.mode === 'play' || G.mode === 'complete') {
+    acc += dt;
+    while (acc >= STEP) { step(STEP); acc -= STEP; }
+  }
+  const anchor = player.anchor();
+  if (firstFrame) { stage.snap(anchor, player.headingNow); firstFrame = false; }
+  stage.follow(Math.max(dt, 0.001), anchor, player.headingNow, player.speedNow);
+  hud.update(dt, G);
+  stage.renderer.render(stage.scene, stage.camera);
 }
-
-if (shot) runShot(shot);
-else runGame();
+if (shotName) { hud.showTitle(false); }
+frame();
+window.__ready = true;

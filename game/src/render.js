@@ -1,103 +1,71 @@
-// The three.js renderer: a warm sunset sky dome, soft fog, a low sun and
-// the follow camera. The camera rides behind the player or their car and
-// climbs above any roof it would otherwise clip through.
+// Renderer, scene, sunset lighting and the third-person camera rig.
 import * as THREE from 'three';
-import { PALETTE } from './config.js';
+import { COLORS } from './config.js';
 
-function skyTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 4;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-  const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-  gradient.addColorStop(0, PALETTE.skyTop);
-  gradient.addColorStop(0.55, PALETTE.skyMid);
-  gradient.addColorStop(1, PALETTE.skyLow);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 4, 256);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-export function createRender(canvas) {
+export function createStage(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = false;
-
+  renderer.setPixelRatio(1);
+  renderer.setSize(innerWidth, innerHeight);
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(PALETTE.fog, 130, 340);
+  scene.background = new THREE.Color(COLORS.sky);
+  scene.fog = new THREE.Fog(COLORS.fog, 230, 850);
+  const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 2000);
 
-  const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(420, 24, 16),
-    new THREE.MeshBasicMaterial({ map: skyTexture(), side: THREE.BackSide, fog: false }),
-  );
-  scene.add(sky);
-
-  const sun = new THREE.Mesh(
-    new THREE.CircleGeometry(26, 24),
-    new THREE.MeshBasicMaterial({ color: PALETTE.sun, fog: false }),
-  );
-  sun.position.set(-260, 55, -180);
-  sun.lookAt(0, 20, 0);
-  scene.add(sun);
-
-  const hemi = new THREE.HemisphereLight(0xffd9a0, 0x4a3a5a, 1.15);
+  const hemi = new THREE.HemisphereLight(0xffd9a0, 0x35304a, 1.3);
   scene.add(hemi);
-  const sunLight = new THREE.DirectionalLight(0xffb36b, 1.6);
-  sunLight.position.set(-120, 90, -60);
-  scene.add(sunLight);
+  const sun = new THREE.DirectionalLight(COLORS.sun, 1.9);
+  sun.position.set(320, 190, -140);
+  scene.add(sun);
+  const fill = new THREE.DirectionalLight(0x7a86ff, 0.35);
+  fill.position.set(-200, 120, 200);
+  scene.add(fill);
 
-  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 900);
-  camera.position.set(0, 8, 14);
+  // Low sun disc and a band of sunset glow on the horizon.
+  const sunBall = new THREE.Mesh(
+    new THREE.SphereGeometry(26, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffcf8a, fog: false }));
+  sunBall.position.set(760, 92, -330);
+  scene.add(sunBall);
 
-  function resize() {
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-  }
-  window.addEventListener('resize', resize);
-
-  const smoothed = new THREE.Vector3(0, 8, 14);
-  let firstFrame = true;
-
-  /**
-   * Follow `focus` (the player or their car) from behind, at `distance`
-   * and `height`; if the camera would sit inside a building, climb above
-   * its roof instead of clipping through the wall.
-   */
-  function followCamera(focus, heading, distance, height, colliders, dt) {
-    const behind = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
-    const wanted = focus.clone().addScaledVector(behind, distance);
-    wanted.y = height;
-    for (const box of colliders) {
-      if (wanted.x > box.minX - 1 && wanted.x < box.maxX + 1 && wanted.z > box.minZ - 1 && wanted.z < box.maxZ + 1) {
-        wanted.y = Math.max(wanted.y, box.height + 3);
-      }
-    }
-    if (firstFrame) {
-      smoothed.copy(wanted);
-      firstFrame = false;
-    } else {
-      smoothed.lerp(wanted, Math.min(1, dt * 5));
-    }
-    camera.position.copy(smoothed);
-    const look = focus.clone();
-    look.y = 2;
+  const cam = { yaw: 0, dist: 11, height: 4.6 };
+  function follow(dt, target, heading, speed) {
+    const wantYaw = heading;
+    let d = wantYaw - cam.yaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    cam.yaw += d * Math.min(1, dt * 4.5);
+    const back = new THREE.Vector3(Math.sin(cam.yaw), 0, Math.cos(cam.yaw));
+    const pos = target.clone().addScaledVector(back, -cam.dist);
+    pos.y = target.y + cam.height + Math.min(2, Math.abs(speed) * 0.03);
+    camera.position.lerp(pos, Math.min(1, dt * 7));
+    const look = target.clone(); look.y += 2.2;
     camera.lookAt(look);
   }
-
-  /** A slow orbit around the city centre for the title screen backdrop. */
-  function orbitCamera(time) {
-    const angle = time * 0.05;
-    camera.position.set(Math.sin(angle) * 90, 42, Math.cos(angle) * 90);
-    camera.lookAt(0, 12, 0);
+  function snap(target, heading) {
+    cam.yaw = heading;
+    const back = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+    camera.position.copy(target).addScaledVector(back, -cam.dist);
+    camera.position.y = target.y + cam.height;
+    camera.lookAt(target.x, target.y + 2.2, target.z);
   }
+  addEventListener('resize', () => {
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  });
+  return { renderer, scene, camera, follow, snap };
+}
 
-  function render() {
-    renderer.render(scene, camera);
+// Shared canvas texture of lit windows, tinted per building at draw time.
+export function windowTexture(rng, base) {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = base; g.fillRect(0, 0, 64, 128);
+  for (let y = 6; y < 120; y += 11) for (let x = 5; x < 58; x += 10) {
+    g.fillStyle = rng.chance(0.55) ? '#ffd98a' : '#241f2e';
+    g.fillRect(x, y, 6, 7);
   }
-
-  return { renderer, scene, camera, resize, followCamera, orbitCamera, render };
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }

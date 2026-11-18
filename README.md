@@ -2,18 +2,20 @@
 [![rank](https://make.fun/badge/gta6-01/bapenven-ctrl/solmar-heat/rank.svg)](https://make.fun/c/gta6-01)
 [![reward](https://make.fun/badge/gta6-01/bapenven-ctrl/solmar-heat/reward.svg)](https://make.fun/c/gta6-01)
 
+Bounty: https://make.fun/bounty/gta6-01
+
 # Solmar Heat
 
 Game open-world 3D ala GTA di browser — kota pantai fiktif **Solmar** saat matahari terbenam. Kamu **Rex Marlowe**, sopir sewaan yang baru saja mengambil paket terakhirnya, dan paket itu milik orang yang salah.
 
 ## Yang ada di dalam game
 
-- **Kota Solmar**: grid jalan, gedung prosedural dengan jendela menyala, Menara Solmar, pantai dan laut di timur, pohon palem dan lampu jalan.
-- **Jalan kaki & mengemudi**: third-person, masuk/keluar mobil (E), tabrakan, lalu lintas AI yang berbelok di persimpangan, mobil parkir, dan pejalan kaki yang lari saat ada kejahatan.
-- **Wanted level & polisi**: bintang 0–5 — naik saat mencuri mobil, menabrak pejalan kaki/polisi, atau menembak. Mobil polisi mengejar dengan sirene dan light bar berkedip, menabrak dengan damage kecil dan cooldown.
-- **3 misi cerita berurutan**: *Paket Pelabuhan* (ambil & antar, $150), *Pelarian* (kabur dari kejaran wanted 2 ke tempat persembunyian, $200), *Curi dan Antar* (curi mobil target dari geng rival, $400) — dengan beacon emas, objektif di HUD, layar "MISI SELESAI" dan auto-save.
-- **Combat**: pukulan (F) dan pistol (klik mouse) melawan anggota geng rival yang bernyawa.
-- **HUD + minimap**: nyawa, uang, bintang wanted, kecepatan, jam dalam game, objektif misi, toast, dan minimap top-down (jalan, pemain, mobil, polisi, marker misi).
+- **Dua distrik**: *Solmar* — grid jalan, gedung prosedural dengan jendela menyala, Menara Solmar, pantai dan laut di timur, pelabuhan kontainer dengan derek, strip bandara di selatan; dan *Bukit Cemara* — kawasan vila di perbukitan terasering sisi barat dengan Menara Pandang sendiri, terhubung lewat jalan pesisir dan jembatan kecil di atas teluk.
+- **Jalan kaki & mengemudi**: third-person, masuk/keluar mobil (E), tabrakan, lalu lintas AI yang berbelok di persimpangan dan memutari Bukit Cemara, mobil parkir, dan pejalan kaki yang lari saat ada kejahatan.
+- **Wanted level & polisi**: bintang 0–5 — naik saat mencuri mobil, menabrak pejalan kaki/polisi, atau menembak. Mobil polisi mengejar dengan sirene dan light bar berkedip. **Wanted ≥3: roadblock** — dua mobil polisi dan barikade melintang di jalan depanmu. **Wanted ≥4: helikopter polisi** dengan rotor berputar dan kerucut sorot lampu yang mengikutimu; wanted tidak meluruh selama polisi atau helikopter melihatmu.
+- **7 misi cerita berurutan**: *Paket Pelabuhan* ($150), *Pelarian* ($200), *Curi dan Antar* ($400), *Balapan Dermaga* — checkpoint race dua distrik ($300), *Utang Lama* — rebut 3 titik utang dari geng Karang ($450), *Konvoi* — kawal mobil kawan melintasi kota ($500), *Paket Terakhir* — antar di wanted 4 melewati roadblock ($750). Beacon emas, objektif di HUD, layar "MISI SELESAI" dan auto-save di tiap misi.
+- **Combat**: pukulan (F) dan pistol (klik mouse) melawan anggota geng rival yang bernyawa dan melawan balik.
+- **HUD + minimap**: nyawa, uang, bintang wanted, kecepatan, jam dalam game, objektif misi, toast, dan minimap top-down yang memuat kedua distrik (jalan, pemain, mobil, polisi, roadblock, marker misi).
 - **Layar & save**: layar judul, jeda, misi selesai, dan save otomatis ke localStorage (uang, misi, posisi) dengan indikator "TERSIMPAN".
 - **Suara prosedural** (WebAudio, tanpa file audio): dengung mesin mengikuti kecepatan, sirene dua nada, tembakan, pukulan, bunyi ambil, klik UI, tombol mute (M).
 
@@ -26,7 +28,7 @@ node serve.ts
 # buka http://localhost:8080
 ```
 
-Screenshot diambil dari gameplay nyata lewat `?shot=cover|start|chase|mission&seed=N` (lihat `shots.json` dan `tools/shoot.mjs`).
+Screenshot diambil dari gameplay nyata lewat `?shot=cover|harbor|district2|finale&seed=N` (lihat `shots.json` dan `tools/shoot.mjs`) — keempatnya adegan multi-sistem yang sedang berjalan, bukan layar menu.
 
 ## Kontrol
 
