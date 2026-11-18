@@ -17,6 +17,11 @@ export class Hud {
     this.starsEl = $('stars');
     this.clockEl = $('clock');
     this.healthFill = $('health-fill');
+    this.healthNum = $('health-num');
+    this.cpPanel = $('complete-panel');
+    this.cpMission = $('cp-mission');
+    this.cpPayout = $('cp-payout');
+    this.cpTotal = $('cp-total');
     this.speedEl = $('speed');
     this.gearEl = $('gear');
     this.toastEl = $('toast');
@@ -61,7 +66,22 @@ export class Hud {
   }
 
   setHealth(frac) {
-    this.healthFill.style.width = `${Math.max(0, Math.min(1, frac)) * 100}%`;
+    const f = Math.max(0, Math.min(1, frac));
+    this.healthFill.style.width = `${f * 100}%`;
+    this.healthNum.textContent = `${Math.round(f * 100)}`;
+  }
+
+  // The mission-complete payout panel: proof of the game loop, shown by
+  // the real completion flow and by the district2 screenshot staging.
+  showComplete({ mission, payout, total }) {
+    this.cpMission.textContent = mission;
+    this.cpPayout.textContent = `+$${Math.round(payout).toLocaleString('en-US')}`;
+    this.cpTotal.textContent = `$${Math.round(total).toLocaleString('en-US')}`;
+    this.cpPanel.classList.add('show');
+  }
+
+  hideComplete() {
+    this.cpPanel.classList.remove('show');
   }
 
   setSpeed(kmh, label) {
@@ -96,7 +116,7 @@ export class Hud {
   }
 
   // state: {px, pz, angle, target, cops:[{x,z}], heli:{x,z}|null,
-  //         thief:{x,z}|null, cases:[{x,z}], inCar}
+  //         thief:{x,z}|null, cases:[{x,z}], pois:[{x,z}], inCar}
   drawMinimap(state) {
     const ctx = this.map;
     const W = 376;
@@ -105,20 +125,54 @@ export class Hud {
     const mx = (x) => ((x + 180) / 430) * W;
     const mz = (z) => H - ((z + 150) / 610) * H;
 
-    ctx.fillStyle = '#274b36';
+    // Land base, then the sea with a sandy quay edge and grey piers.
+    ctx.fillStyle = '#2e5b34';
     ctx.fillRect(0, 0, W, H);
-    // Sea.
     ctx.fillStyle = '#1d6f8e';
     ctx.fillRect(0, mz(-24), W, H - mz(-24));
-    // Hill mass.
+    ctx.fillStyle = '#d9c08a';
+    ctx.fillRect(0, mz(-14), W, mz(-24) - mz(-14));
+    ctx.fillStyle = '#8a8f96';
+    for (const px of [-96, -16, 64]) {
+      ctx.fillRect(mx(px), mz(-24), mx(px + 11) - mx(px), mz(-84) - mz(-24));
+    }
+    // Downtown: an urban ground tone with a built-up panel on every
+    // block, so the grid reads as a city and not as lines on grass.
+    ctx.fillStyle = '#57604f';
+    ctx.fillRect(mx(-150), mz(228), mx(150) - mx(-150), mz(-24) - mz(228));
+    ctx.fillStyle = '#7d8771';
+    const ax = WORLD.avenueX;
+    const sz = WORLD.streetZ;
+    for (let i = 0; i < ax.length - 1; i++) {
+      for (let j = 0; j < sz.length - 1; j++) {
+        const x0 = ax[i] + WORLD.blockGap - 4;
+        const x1 = ax[i + 1] - WORLD.blockGap + 4;
+        const z0 = sz[j] + WORLD.blockGap - 4;
+        const z1 = sz[j + 1] - WORLD.blockGap + 4;
+        ctx.fillRect(mx(x0), mz(z1), mx(x1) - mx(x0), mz(z0) - mz(z1));
+      }
+    }
+    // Hill mass with its plateau villas.
     ctx.fillStyle = '#3d6b35';
     ctx.fillRect(mx(-150), mz(460), mx(150) - mx(-150), mz(228) - mz(460));
-    // Airstrip.
+    ctx.fillStyle = '#dcebcb';
+    for (const v of [[-84, 330], [-40, 386], [38, 342], [86, 392], [-96, 402], [64, 318]]) {
+      ctx.fillRect(mx(v[0]) - 3, mz(v[1]) - 3, 6, 6);
+    }
+    // Airstrip with a dashed centreline.
     ctx.fillStyle = '#6a7076';
     ctx.fillRect(mx(168), mz(224), mx(196) - mx(168), mz(8) - mz(224));
-    // Roads.
-    ctx.strokeStyle = '#c8cdd2';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#f2f4f6';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 6]);
+    ctx.beginPath();
+    ctx.moveTo(mx(182), mz(216));
+    ctx.lineTo(mx(182), mz(16));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Roads, bright on top of the blocks.
+    ctx.strokeStyle = '#e8ecf0';
+    ctx.lineWidth = 4;
     ctx.beginPath();
     for (const x of WORLD.avenueX) {
       ctx.moveTo(mx(x), mz(-20));
@@ -135,6 +189,14 @@ export class Hud {
     ctx.moveTo(mx(-104), mz(352));
     ctx.lineTo(mx(104), mz(352));
     ctx.stroke();
+    // District labels.
+    ctx.font = '700 17px "Segoe UI", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fillText('PUSAT KOTA', mx(-36), mz(124));
+    ctx.fillText('BUKIT CEMARA', mx(-54), mz(424));
+    ctx.fillText('BANDARA', mx(96), mz(116));
+    ctx.fillStyle = 'rgba(215,242,255,0.95)';
+    ctx.fillText('PELABUHAN', mx(48), mz(-100));
 
     const dot = (x, z, color, r = 5) => {
       ctx.fillStyle = color;
@@ -142,6 +204,16 @@ export class Hud {
       ctx.arc(mx(x), mz(z), r, 0, Math.PI * 2);
       ctx.fill();
     };
+    // Mission givers as ringed gold POIs.
+    for (const p of state.pois ?? []) {
+      ctx.fillStyle = '#ffd34d';
+      ctx.beginPath();
+      ctx.arc(mx(p.x), mz(p.z), 4.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(24,18,2,0.9)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    }
     for (const c of state.cases ?? []) dot(c.x, c.z, '#ffd34d', 4);
     if (state.thief) dot(state.thief.x, state.thief.z, '#ff4040', 6);
     for (const c of state.cops ?? []) dot(c.x, c.z, '#3d8bff', 5);

@@ -40,13 +40,31 @@
   #stars .off { color: rgba(255,255,255,0.22); text-shadow: none; }
   #clock { font-size: 13px; opacity: 0.85; letter-spacing: 1px; }
 
-  #vitals { position: absolute; left: 16px; bottom: 16px; width: 240px; }
-  #vitals .bar-label { font-size: 11px; letter-spacing: 2px; opacity: 0.85; display: flex; justify-content: space-between; }
-  #health-track { height: 12px; border-radius: 6px; background: rgba(255,255,255,0.16); overflow: hidden; margin: 4px 0 8px; }
+  #vitals { position: absolute; left: 16px; bottom: 16px; width: 300px; }
+  #vitals .bar-label { font-size: 12px; font-weight: 700; letter-spacing: 2px; display: flex; justify-content: space-between; }
+  #vitals .bar-label #health-num { color: #7be495; }
+  #health-track { height: 16px; border-radius: 8px; background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.35); overflow: hidden; margin: 4px 0 8px; }
   #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #e5484d, #ffb340); transition: width 0.18s; }
-  #speed { font-size: 26px; font-weight: 800; }
-  #speed small { font-size: 12px; font-weight: 600; opacity: 0.8; }
+  #speed { font-size: 34px; font-weight: 800; line-height: 1.05; }
+  #speed small { font-size: 13px; font-weight: 600; opacity: 0.8; }
   #gear { font-size: 12px; letter-spacing: 1px; opacity: 0.9; }
+  #controls-hint { margin-top: 7px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,0.18); font-size: 11.5px; letter-spacing: 0.4px; opacity: 0.88; }
+  #controls-hint b { color: var(--gold); font-weight: 700; }
+
+  #complete-panel {
+    position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%);
+    text-align: center; padding: 22px 40px 20px; min-width: 380px; display: none;
+  }
+  #complete-panel.show { display: block; }
+  #complete-panel .cp-title { font-size: 36px; font-weight: 900; letter-spacing: 3px; color: var(--gold); text-shadow: 0 3px 0 rgba(0,0,0,0.45); }
+  #complete-panel .cp-mission { font-size: 18px; font-weight: 700; margin: 4px 0 12px; }
+  #complete-panel .cp-row { display: flex; justify-content: space-between; gap: 36px; font-size: 15.5px; padding: 3px 2px; }
+  #complete-panel .cp-row b { color: #7be495; }
+  #complete-panel .cp-btn {
+    margin-top: 14px; display: inline-block; border: 2px solid var(--gold); color: #131313;
+    background: linear-gradient(180deg, #ffc95e, #ff9d2e); font-size: 15px; font-weight: 800;
+    letter-spacing: 1px; padding: 9px 30px; border-radius: 9px;
+  }
 
   #minimap-wrap { position: absolute; right: 16px; bottom: 16px; padding: 6px; }
   #minimap { display: block; width: 188px; height: 188px; border-radius: 6px; }
@@ -120,9 +138,17 @@
     <div id="clock">06:00</div>
   </div>
   <div id="vitals" class="hud-panel">
-    <div class="bar-label"><span>NYAWA</span><span id="gear">DI JALAN</span></div>
+    <div class="bar-label"><span>NYAWA</span><span><span id="health-num">100</span> &bull; <span id="gear">DI JALAN</span></span></div>
     <div id="health-track"><div id="health-fill"></div></div>
     <div id="speed">0 <small>km/j</small></div>
+    <div id="controls-hint"><b>WASD</b> mengemudi &bull; <b>E</b> masuk mobil &bull; <b>Klik</b> tembak &bull; <b>Shift</b> boost &bull; <b>Spasi</b> rem tangan</div>
+  </div>
+  <div id="complete-panel" class="hud-panel">
+    <div class="cp-title">MISI SELESAI</div>
+    <div class="cp-mission" id="cp-mission">Misi</div>
+    <div class="cp-row"><span>Hadiah misi</span><b id="cp-payout">+$0</b></div>
+    <div class="cp-row"><span>Total uang</span><b id="cp-total">$0</b></div>
+    <div class="cp-btn">MISI BERIKUTNYA &#9656;</div>
   </div>
   <div id="minimap-wrap" class="hud-panel"><canvas id="minimap" width="376" height="376"></canvas></div>
   <div id="toast" class="hud-panel"></div>

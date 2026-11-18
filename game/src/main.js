@@ -10,7 +10,7 @@ import { SoundBank } from './audio.js';
 import { Traffic } from './traffic.js';
 import { Player } from './player.js';
 import { Police } from './police.js';
-import { MissionRunner } from './missions.js';
+import { MissionRunner, MISSIONS } from './missions.js';
 import { Combat } from './combat.js';
 import { Hud } from './hud.js';
 import { stageScene, shotCamera, SCENE_NAMES } from './shots.js';
@@ -46,6 +46,8 @@ const game = {
   rng,
   objectiveOverride: null,
   addVehicle: (v) => extraVehicles.push(v),
+  // Staging sets the wallet directly; the HUD loop reads state.cash.
+  setCash: (n) => { state.cash = n; },
 };
 
 window.__GAME = game; // staging/debugging handle for tools/shoot.mjs
@@ -455,11 +457,14 @@ function frame() {
     if (state.mode === 'play') {
       missions.update(dt, now, { player, police, rng, world });
       for (const ev of missions.drainEvents()) {
-        if (ev.type === 'start') hud.toast(`Misi dimulai: ${ev.mission.title}`);
-        else if (ev.type === 'stage') hud.toast(ev.text);
+        if (ev.type === 'start') {
+          hud.hideComplete();
+          hud.toast(`Misi dimulai: ${ev.mission.title}`);
+        } else if (ev.type === 'stage') hud.toast(ev.text);
         else if (ev.type === 'complete') {
           state.cash += ev.payout;
           hud.banner('MISI SELESAI', `${ev.mission.title} — +$${ev.payout.toLocaleString('en-US')}`);
+          hud.showComplete({ mission: ev.mission.title, payout: ev.payout, total: state.cash });
           if (missions.allDone) hud.banner('CERITA TAMAT', 'Semua 7 misi selesai. Solmar milikmu, Raka.', 5200);
           saveGame();
         } else if (ev.type === 'fail') {
@@ -516,6 +521,7 @@ function frame() {
       heli: police.heli ? { x: police.heli.group.position.x, z: police.heli.group.position.z } : null,
       thief: missions.thief ? { x: missions.thief.mesh.position.x, z: missions.thief.mesh.position.z } : null,
       cases: missions.caseMeshes.filter((c) => c.visible).map((c) => ({ x: c.position.x, z: c.position.z })),
+      pois: MISSIONS.map((m) => m.giver),
     });
   }
 
